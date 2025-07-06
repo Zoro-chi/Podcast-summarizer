@@ -1,4 +1,5 @@
 import { tailwindColors } from "../constants/Color";
+import { stripHtmlTags } from "../utils/htmlCleaner";
 
 interface EpisodeCardProps {
   title: string;
@@ -28,19 +29,19 @@ export default function EpisodeCard({
 }: EpisodeCardProps) {
   return (
     <div
-      className={`p-4 rounded-lg ${tailwindColors.card.background} ${tailwindColors.card.hover} transition-colors`}
+      className={`p-4 rounded-lg ${tailwindColors.card.background} ${tailwindColors.card.hover} transition-colors overflow-hidden`}
     >
       <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-        <div className="flex-1">
+        <div className="flex-1 min-w-0 overflow-hidden">
           <h2
-            className={`font-semibold text-lg ${tailwindColors.text.primary}`}
+            className={`font-semibold text-lg ${tailwindColors.text.primary} truncate`}
           >
             {title}
           </h2>
           <p
-            className={`text-sm ${tailwindColors.text.secondary} line-clamp-2`}
+            className={`text-sm ${tailwindColors.text.secondary} line-clamp-2 break-words overflow-hidden max-w-full`}
           >
-            {description}
+            {stripHtmlTags(description)}
           </p>
           <span className={`text-xs ${tailwindColors.text.muted}`}>
             {typeof pubDate === "number"
@@ -67,19 +68,21 @@ export default function EpisodeCard({
             )}
           </div>
           {summary && (
-            <div className="mt-3 p-2 bg-gray-100 dark:bg-gray-800 rounded text-sm text-gray-800 dark:text-gray-200">
+            <div className="mt-3 p-2 bg-gray-100 dark:bg-gray-800 rounded text-sm text-gray-800 dark:text-gray-200 break-words overflow-hidden">
               <strong>Summary:</strong> {summary}
             </div>
           )}
           {transcript && (
             <div className="mt-3 p-2 bg-gray-50 dark:bg-gray-900 rounded text-xs text-gray-700 dark:text-gray-200 max-h-60 overflow-y-auto whitespace-pre-line">
               <strong>Transcript:</strong>
-              <div className="mt-1">{transcript}</div>
+              <div className="mt-1 break-words overflow-hidden">
+                {stripHtmlTags(transcript)}
+              </div>
             </div>
           )}
         </div>
         {audio && (
-          <audio controls className="w-full sm:w-48 mt-2 sm:mt-0">
+          <audio controls className="w-full sm:w-48 mt-2 sm:mt-0 max-w-full">
             <source src={audio} type="audio/mpeg" />
             Your browser does not support the audio element.
           </audio>
