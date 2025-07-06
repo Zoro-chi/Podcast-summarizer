@@ -7,6 +7,8 @@ import { tailwindColors } from "../constants/Color";
 import usePodcastMetadata from "../hooks/usePodcastMetadata";
 import { Episode } from "../types/podcast";
 import { getResultsPerPage } from "../utils/userPreferences";
+import { useToast } from "../hooks/useToast";
+import ToastContainer from "../components/ToastContainer";
 
 const EpisodeCard = dynamic(() => import("../components/EpisodeCard"), {
   loading: () => <div className="animate-pulse">Loading episode...</div>,
@@ -35,6 +37,7 @@ function EpisodesPageInner() {
     [id: string]: boolean;
   }>({});
   const [page, setPage] = useState(1);
+  const { toasts, showToast, removeToast } = useToast();
 
   // Get language preference from localStorage (client-side)
   const [languagePref, setLanguagePref] = useState("en");
@@ -62,13 +65,32 @@ function EpisodesPageInner() {
     const epId = ep.id;
     setSummarizing((prev) => ({ ...prev, [epId]: true }));
     try {
-      // Fetch transcript
+      // Fetch transcript and description
       const transcriptRes = await fetch(
         `/api/episodes/transcript?episodeId=${encodeURIComponent(epId)}`
       );
       const transcriptData = await transcriptRes.json();
-      if (!transcriptData.transcript)
-        throw new Error("No transcript available for this episode.");
+
+      // Check if we have either transcript or description
+      if (!transcriptData.transcript && !transcriptData.description) {
+        throw new Error(
+          "No transcript or description available for this episode."
+        );
+      }
+
+      // Show user feedback about what type of content is being used
+      const isUsingDescription =
+        !transcriptData.transcript && transcriptData.description;
+      if (isUsingDescription) {
+        showToast(
+          "📄 No transcript available. Summarizing episode description instead.",
+          "warning",
+          6000
+        );
+      } else {
+        showToast("📝 Summarizing episode transcript...", "info", 3000);
+      }
+
       // Call AI summarizer API
       const res = await fetch("/api/summarize", {
         method: "POST",
@@ -76,6 +98,7 @@ function EpisodesPageInner() {
         body: JSON.stringify({
           episodeId: epId,
           transcript: transcriptData.transcript,
+          description: transcriptData.description,
           language: languagePref, // Pass language preference
         }),
       });
@@ -86,6 +109,7 @@ function EpisodesPageInner() {
       let cleanSummary = data.summary || "";
       let keyPoints = data.keyPoints || [];
       let sentiment = data.sentiment || "neutral";
+      const isFromTranscript = data.isFromTranscript;
 
       try {
         // Check if summary is a JSON string (possibly wrapped in markdown)
@@ -131,12 +155,16 @@ function EpisodesPageInner() {
         summary: String(cleanSummary ?? ""),
         keyPoints: JSON.stringify(keyPoints ?? []),
         sentiment: String(sentiment ?? ""),
+        isFromTranscript: String(isFromTranscript ?? true),
         fromSummarize: "true",
       });
 
       router.push(`/summaries?${params.toString()}`);
-    } catch {
-      // Handle error silently
+    } catch (error) {
+      // Show error toast with specific message
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to summarize episode";
+      showToast(`❌ ${errorMessage}`, "error", 5000);
     } finally {
       setSummarizing((prev) => ({ ...prev, [epId]: false }));
     }
@@ -150,14 +178,27 @@ function EpisodesPageInner() {
         `/api/episodes/transcript?episodeId=${encodeURIComponent(epId)}`
       );
       const data = await res.json();
-      setTranscripts((prev) => ({
-        ...prev,
-        [epId]: data.transcript || "No transcript available.",
-      }));
+
+      if (data.transcript) {
+        setTranscripts((prev) => ({
+          ...prev,
+          [epId]: data.transcript,
+        }));
+      } else if (data.description) {
+        setTranscripts((prev) => ({
+          ...prev,
+          [epId]: `[Episode Description - Transcript not available]\n\n${data.description}`,
+        }));
+      } else {
+        setTranscripts((prev) => ({
+          ...prev,
+          [epId]: "No transcript or description available.",
+        }));
+      }
     } catch {
       setTranscripts((prev) => ({
         ...prev,
-        [epId]: "Failed to fetch transcript.",
+        [epId]: "Failed to fetch episode content.",
       }));
     } finally {
       setTranscriptLoading((prev) => ({ ...prev, [epId]: false }));
@@ -169,6 +210,12 @@ function EpisodesPageInner() {
       className={`min-h-screen ${tailwindColors.background} transition-colors`}
     >
       <Header />
+      <ToastContainer
+        toasts={toasts.map((toast) => ({
+          ...toast,
+          onClose: removeToast,
+        }))}
+      />
       <main className="w-full max-w-3xl mx-auto py-6 px-3 sm:py-10 sm:px-6">
         <h1
           className={`text-2xl font-bold ${tailwindColors.text.primary} mb-6`}

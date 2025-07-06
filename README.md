@@ -14,34 +14,42 @@
 
 ### 🔍 Podcast Discovery
 
-- **Browse Trending Podcasts**: Discover the best podcasts using the Listen Notes API
-- **Smart Search**: Find podcasts by keywords with debounced search functionality
-- **Episode Browsing**: View latest episodes for any selected podcast
+- **Browse Trending Podcasts**: Discover the best podcasts using the Listen Notes API with pagination support
+- **Smart Search**: Find podcasts by keywords with debounced search functionality and paginated results
+- **Episode Browsing**: View latest episodes for any selected podcast with proper pagination
+- **Duplicate Prevention**: Advanced deduplication system ensures no duplicate content across pages
+- **API Flexibility**: Easy switching between Live and Mock ListenNotes APIs via environment configuration
 
 ### 🤖 AI-Powered Summarization
 
 - **Intelligent Summaries**: Generate comprehensive episode summaries using Google Gemini and OpenAI GPT-4
+- **Smart Fallback System**: Automatically uses episode descriptions when transcripts aren't available (especially with Live ListenNotes API)
 - **Key Points Extraction**: Automatically identify and highlight the most important takeaways
 - **Sentiment Analysis**: Understand the overall tone and mood of episodes
 - **Multi-language Support**: Customize summary language through user preferences
-- **Fallback System**: Automatic failover between AI providers for reliability
+- **Dual AI Provider Support**: Automatic failover between Gemini and OpenAI for reliability
+- **Content Source Transparency**: Clear indicators when summaries are based on descriptions vs. full transcripts
 
 ### 👤 Personalized Experience
 
 - **User Profiles**: Unique user identification with localStorage persistence
 - **Save Summaries**: Store your favorite episode summaries for later reference
 - **Personal Library**: Access all your saved summaries in one organized view
+- **Smart Pagination**: Navigate through large collections with proper deduplication
 - **Bulk Management**: Clear all summaries with a single click
-- **Pagination**: Navigate through large collections of saved summaries
+- **Toast Notifications**: Real-time feedback for all user actions (save, delete, errors)
+- **Individual Summary Management**: Delete specific summaries with instant feedback
 
 ### 🎨 Modern Interface
 
 - **Responsive Design**: Seamless experience across desktop, tablet, and mobile devices
 - **Dark/Light Mode**: Toggle between themes with smooth transitions
 - **Clean UI**: Modern, intuitive interface built with Tailwind CSS
+- **Toast Notifications**: Elegant slide-in notifications for user feedback
 - **Accessibility**: WCAG compliant design with proper contrast and navigation
 - **Next.js Image Optimization**: Optimized image loading with automatic format conversion
 - **Suspense Boundaries**: Proper loading states for better user experience
+- **Smart Pagination Controls**: Consistent pagination with proper disabled states across all pages
 
 ### ⚙️ User Preferences
 
@@ -73,26 +81,7 @@
 - MongoDB database
 - API keys for OpenAI, Google Gemini, and Listen Notes
 
-**Note**: If you don't have an API key for Listen Notes, you can still run the app in development with the Listen Notes API mocked. However, these are Mock / Static data and will not provide real-time podcast information. You can do this in `utils/listenNotesApi.ts`. See below:
-
-Comment out the Listen Notes API key and use the mock URL instead:
-
-```typescript
-// const LISTEN_NOTES_API_KEY = process.env.LISTEN_NOTES_API_KEY;
-// const BASE_URL = "https://listen-api.listennotes.com/api/v2";
-const MOCK_URL = "https://listen-api-test.listennotes.com/api/v2";
-```
-
-No API key is required for the mock data.
-
-```typescript
-const res = await axios.get(url, {
-  params,
-  headers: {
-    // "X-ListenAPI-Key": LISTEN_NOTES_API_KEY!,
-  },
-});
-```
+**Note**: If you don't have an API key for Listen Notes, you can still run the app in development with the Listen Notes API mocked. Set `USE_MOCK_API=true` in your `.env.local` file. However, Mock data is static and will not provide real-time podcast information or full transcripts for summarization. The app will automatically fall back to using episode descriptions for summarization when transcripts aren't available.
 
 ### Installation
 
@@ -115,6 +104,7 @@ npm install
 ```env
 # Listen Notes API for podcast data
 LISTEN_NOTES_API_KEY=your_listen_notes_api_key
+USE_MOCK_API=false  # Set to 'true' to use mock data for development
 
 # AI Services
 OPENAI_API_KEY=your_openai_api_key
@@ -178,7 +168,8 @@ podcast-summarizer/
 │   │   │   ├── EpisodeCard.tsx  # Episode display card
 │   │   │   ├── SkeletonCard.tsx # Loading skeleton
 │   │   │   ├── SummarySkeleton.tsx # Summary loading state
-│   │   │   └── ThemeToggle.tsx  # Dark/light mode toggle
+│   │   │   ├── ThemeToggle.tsx  # Dark/light mode toggle
+│   │   │   └── ToastContainer.tsx # Toast notification system
 │   │   ├── constants/           # App constants
 │   │   │   └── Color.ts         # Tailwind color scheme
 │   │   ├── types/               # Shared type definitions
@@ -193,12 +184,15 @@ podcast-summarizer/
 │   │   │   └── userRepository.ts
 │   │   ├── hooks/               # Custom React hooks
 │   │   │   ├── useBestPodcasts.ts
-│   │   │   └── usePodcastMetadata.ts
+│   │   │   ├── usePodcastMetadata.ts
+│   │   │   └── useToast.ts      # Toast notification hook
 │   │   ├── utils/               # Utility functions
 │   │   │   ├── mongodb.ts       # Database connection
 │   │   │   ├── openai.ts        # OpenAI API integration
 │   │   │   ├── gemini.ts        # Google Gemini integration
-│   │   │   └── listenNotesApi.ts # Listen Notes API
+│   │   │   ├── listenNotesApi.ts # Listen Notes API
+│   │   │   ├── deduplication.ts # Data deduplication utilities
+│   │   │   └── userPreferences.ts # User preference management
 │   │   ├── api/                 # API routes
 │   │   │   ├── best-podcasts/   # Trending podcasts
 │   │   │   ├── search-podcasts/ # Podcast search
@@ -225,104 +219,56 @@ podcast-summarizer/
 
 ## 🔗 API Endpoints
 
-| Endpoint                   | Method          | Description                |
-| -------------------------- | --------------- | -------------------------- |
-| `/api/best-podcasts`       | GET             | Fetch trending podcasts    |
-| `/api/search-podcasts`     | GET             | Search podcasts by query   |
-| `/api/episodes`            | GET             | Get episodes for a podcast |
-| `/api/episodes/transcript` | GET             | Get episode transcript     |
-| `/api/summaries`           | GET/POST/DELETE | Manage user summaries      |
-| `/api/summarize`           | POST            | Generate AI summaries      |
+| Endpoint                   | Method          | Description                            |
+| -------------------------- | --------------- | -------------------------------------- |
+| `/api/best-podcasts`       | GET             | Fetch trending podcasts (paginated)    |
+| `/api/search-podcasts`     | GET             | Search podcasts by query (paginated)   |
+| `/api/episodes`            | GET             | Get episodes for a podcast (paginated) |
+| `/api/episodes/transcript` | GET             | Get episode transcript or description  |
+| `/api/summaries`           | GET/POST/DELETE | Manage user summaries (paginated)      |
+| `/api/summarize`           | POST            | Generate AI summaries with fallback    |
 
 ## 🌟 Key Features in Detail
 
 ### AI Summarization
 
-The app uses multiple AI models to ensure high-quality summaries:
+The app uses multiple AI models with intelligent fallback systems to ensure high-quality summaries:
 
-- **Primary**: Google Gemini for redundancy and comparison
+- **Primary**: Google Gemini 2.0 Flash for fast, accurate summarization
 - **Fallback**: OpenAI GPT-4 for comprehensive text understanding
-- **Features**: Configurable summary length, language, and style
-- **Smart Parsing**: Handles JSON-wrapped responses and markdown formatting
-- **Error Recovery**: Graceful fallback when AI services are unavailable
+- **Smart Content Handling**: Uses transcripts when available, automatically falls back to episode descriptions
+- **Content Source Transparency**: Clear user notifications when summaries are based on descriptions vs. full transcripts
+- **HTML Content Cleaning**: Automatic removal of HTML tags and entities from all podcast content before display and AI processing
+- **Multi-language Support**: Configurable summary language and style preferences
+- **Robust Error Recovery**: Graceful handling when AI services are unavailable
+- **Response Processing**: Smart parsing of JSON-wrapped responses and markdown formatting
 
 ### User Experience
 
 - **Responsive Design**: Mobile-first approach with Tailwind CSS
 - **Performance**: Optimized with Next.js 15 and React 19
 - **Accessibility**: WCAG 2.1 AA compliant interface
-- **State Management**: Efficient state handling with React hooks
+- **Toast Notifications**: Real-time feedback system for all user actions
+- **Smart Pagination**: Proper page navigation with deduplication across all lists
+- **State Management**: Efficient state handling with React hooks and localStorage
 - **Loading States**: Skeleton components and suspense boundaries
 - **Error Handling**: User-friendly error messages and recovery options
+- **Progressive Enhancement**: Works without JavaScript for basic functionality
 
 ### Data Management
 
 - **MongoDB**: Scalable document database for user data and summaries
 - **Mongoose**: Object modeling for clean data operations
 - **Local Storage**: Client-side preferences and user identification
+- **Advanced Deduplication**: Prevents duplicate episodes/podcasts across paginated results
 - **Type Safety**: Strongly typed data models and API responses
 - **Data Validation**: Input sanitization and validation at all levels
-
-### Code Quality
-
-- **100% TypeScript**: Complete type safety with zero `any` types
-- **ESLint Clean**: Zero linting errors or warnings
-- **Shared Types**: Consistent interfaces across components and APIs
-- **Clean Architecture**: Separation of concerns with clear boundaries
-- **Error Boundaries**: Proper error handling throughout the application
-- **Performance Optimized**: Code splitting and lazy loading where appropriate
-
-## 🤝 Contributing
-
-We welcome contributions! Please follow these steps:
-
-1. **Fork the repository**
-2. **Create your feature branch**
-   ```bash
-   git checkout -b feature/AmazingFeature
-   ```
-3. **Follow our coding standards**
-   - Maintain 100% TypeScript coverage (no `any` types)
-   - Ensure ESLint passes with zero warnings
-   - Add proper type definitions for new features
-   - Use shared types from `src/app/types/`
-4. **Test your changes**
-   ```bash
-   npm run build  # Ensure build passes
-   npm run lint   # Ensure no linting errors
-   npx tsc --noEmit  # Type check
-   ```
-5. **Commit your changes**
-   ```bash
-   git commit -m 'Add some AmazingFeature'
-   ```
-6. **Push to the branch**
-   ```bash
-   git push origin feature/AmazingFeature
-   ```
-7. **Open a Pull Request**
-
-### Code Style Guidelines
-
-- Use TypeScript for all new code
-- Follow existing patterns for API routes and components
-- Implement proper error handling
-- Add loading states for async operations
-- Use Next.js Image component for images
-- Wrap components using `useSearchParams` in Suspense boundaries
-
-## 🙏 Acknowledgments
-
-- [Listen Notes](https://www.listennotes.com/) for podcast data
-- [OpenAI](https://openai.com/) for GPT-4 API
-- [Google](https://ai.google.dev/) for Gemini API
-- [Vercel](https://vercel.com/) for deployment platform
-- [Tailwind CSS](https://tailwindcss.com/) for styling framework
+- **Efficient Pagination**: Proper offset-based pagination with ListenNotes API compatibility
 
 ---
 
 <div align="center">
-  <p>Built with ❤️ for podcast lovers everywhere</p>
+  <p><b>Built with ❤️ for podcast lovers everywhere<b></p>
   <p>
     <a href="#-podcast-summarizer">Back to top</a>
   </p>

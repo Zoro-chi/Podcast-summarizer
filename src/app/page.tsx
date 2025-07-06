@@ -2,13 +2,15 @@
 import Header from "./components/Header";
 import PodcastCard from "./components/PodcastCard";
 import { useEffect, useState, useRef } from "react";
+import { useCallback } from "react";
 import { tailwindColors } from "./constants/Color";
 import { useRouter } from "next/navigation";
 import useBestPodcasts from "./hooks/useBestPodcasts";
 import { Podcast } from "./types/podcast";
 import { getResultsPerPage } from "./utils/userPreferences";
+import { deduplicatePodcasts } from "./utils/deduplication";
 
-const SEARCH_DEBOUNCE_MS = 900; // Increased debounce delay
+const SEARCH_DEBOUNCE_MS = 900; // Debounce delay
 const MIN_SEARCH_LENGTH = 3; // Minimum characters to trigger search
 
 function getUserSettings() {
@@ -45,6 +47,7 @@ export default function Home() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
   const searchTimeout = useRef<NodeJS.Timeout | null>(null);
   const initialLoad = useRef(true);
   const searchTriggered = useRef(false);
@@ -57,6 +60,7 @@ export default function Home() {
     error: swrError,
     isLoading: swrLoading,
   } = useBestPodcasts({
+    page: page,
     page_size: settings.resultsPerPage,
     genre: settings.genre,
     explicit_content: settings.showExplicit ? "1" : "",
@@ -69,26 +73,27 @@ export default function Home() {
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
-  // Helper to trigger search immediately (used for Enter key)
-  const triggerSearch = () => {
-    if (search.length < MIN_SEARCH_LENGTH) {
-      setPodcasts([]);
-      setError(`Enter at least ${MIN_SEARCH_LENGTH} characters to search.`);
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    const params = new URLSearchParams();
-    params.set("q", search);
-    params.set("type", "podcast");
-    params.set("page_size", String(settings.resultsPerPage));
-    if (settings.genre) params.set("genre", settings.genre);
-    if (settings.showExplicit) params.set("explicit_content", "1");
-    fetch(`/api/search-podcasts?${params.toString()}`)
-      .then((res) => res.json())
-      .then((data) => {
-        setPodcasts(
-          (data.podcasts || []).map(
+  // Helper to trigger search immediately (used for Enter key and pagination)
+  const triggerSearch = useCallback(
+    (searchPage: number = 1) => {
+      if (search.length < MIN_SEARCH_LENGTH) {
+        setPodcasts([]);
+        setError(`Enter at least ${MIN_SEARCH_LENGTH} characters to search.`);
+        return;
+      }
+      setLoading(true);
+      setError(null);
+      const params = new URLSearchParams();
+      params.set("q", search);
+      params.set("type", "podcast");
+      params.set("page", String(searchPage));
+      params.set("page_size", String(settings.resultsPerPage));
+      if (settings.genre) params.set("genre", settings.genre);
+      if (settings.showExplicit) params.set("explicit_content", "1");
+      fetch(`/api/search-podcasts?${params.toString()}`)
+        .then((res) => res.json())
+        .then((data) => {
+          const newPodcasts = (data.podcasts || []).map(
             (p: RawPodcast) =>
               ({
                 id: p.id,
@@ -97,13 +102,19 @@ export default function Home() {
                 description: p.description || p.description_original,
                 publisher: p.publisher || p.publisher_original,
               } as Podcast)
-          )
-        );
-        if (data.error) setError(data.error);
-      })
-      .catch(() => setError("Failed to fetch podcasts"))
-      .finally(() => setLoading(false));
-  };
+          );
+
+          // Deduplicate podcasts to ensure no duplicates
+          const deduplicatedPodcasts = deduplicatePodcasts(newPodcasts);
+          setPodcasts(deduplicatedPodcasts);
+
+          if (data.error) setError(data.error);
+        })
+        .catch(() => setError("Failed to fetch podcasts"))
+        .finally(() => setLoading(false));
+    },
+    [search, settings.resultsPerPage, settings.genre, settings.showExplicit]
+  );
 
   useEffect(() => {
     if (initialLoad.current) {
@@ -114,6 +125,7 @@ export default function Home() {
     if (!search) {
       setPodcasts([]);
       setError(null);
+      setPage(1); // Reset page when clearing search
       return;
     }
     if (search.length < MIN_SEARCH_LENGTH) {
@@ -124,37 +136,12 @@ export default function Home() {
     // Only debounce if not triggered by Enter
     if (!searchTriggered.current) {
       searchTimeout.current = setTimeout(() => {
-        setLoading(true);
-        setError(null);
-        const params = new URLSearchParams();
-        params.set("q", search);
-        params.set("type", "podcast");
-        params.set("page_size", String(settings.resultsPerPage));
-        if (settings.genre) params.set("genre", settings.genre);
-        if (settings.showExplicit) params.set("explicit_content", "1");
-        fetch(`/api/search-podcasts?${params.toString()}`)
-          .then((res) => res.json())
-          .then((data) => {
-            setPodcasts(
-              (data.podcasts || []).map(
-                (p: RawPodcast) =>
-                  ({
-                    id: p.id,
-                    image: p.image,
-                    title: p.title || p.title_original,
-                    description: p.description || p.description_original,
-                    publisher: p.publisher || p.publisher_original,
-                  } as Podcast)
-              )
-            );
-            if (data.error) setError(data.error);
-          })
-          .catch(() => setError("Failed to fetch podcasts"))
-          .finally(() => setLoading(false));
+        setPage(1); // Reset to page 1 for new search
+        triggerSearch(1);
       }, SEARCH_DEBOUNCE_MS);
     }
     searchTriggered.current = false;
-  }, [search, settings]);
+  }, [search, settings, triggerSearch]);
 
   return (
     <div
@@ -165,7 +152,8 @@ export default function Home() {
         onSearchChange={setSearch}
         onSearchEnter={() => {
           searchTriggered.current = true;
-          triggerSearch();
+          setPage(1); // Reset to page 1 for new search
+          triggerSearch(1);
         }}
       />
       <main className="w-full max-w-4xl mx-auto py-6 px-3 sm:py-10 sm:px-6">
@@ -212,6 +200,46 @@ export default function Home() {
               />
             ))}
         </div>
+
+        {/* Pagination Controls */}
+        {(search ? podcasts.length > 0 : swrPodcasts.length > 0) && (
+          <div className="flex justify-center mt-6 gap-4">
+            <button
+              className="px-3 py-1 rounded bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 disabled:opacity-50"
+              onClick={() => {
+                if (search) {
+                  const newPage = Math.max(1, page - 1);
+                  setPage(newPage);
+                  triggerSearch(newPage);
+                } else {
+                  setPage((p) => Math.max(1, p - 1));
+                }
+              }}
+              disabled={page === 1}
+            >
+              Previous
+            </button>
+            <span className="px-2 py-1">Page {page}</span>
+            <button
+              className="px-3 py-1 rounded bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 disabled:opacity-50"
+              onClick={() => {
+                if (search) {
+                  const newPage = page + 1;
+                  setPage(newPage);
+                  triggerSearch(newPage);
+                } else {
+                  setPage((p) => p + 1);
+                }
+              }}
+              disabled={
+                (search ? podcasts.length : swrPodcasts.length) <
+                settings.resultsPerPage
+              }
+            >
+              Next
+            </button>
+          </div>
+        )}
       </main>
     </div>
   );

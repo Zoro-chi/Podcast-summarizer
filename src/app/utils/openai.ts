@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import dotenv from "dotenv";
+import { cleanTextForAI } from "./htmlCleaner";
 dotenv.config();
 
 const client = new OpenAI();
@@ -16,32 +17,42 @@ const LANGUAGE_MAP: Record<string, string> = {
 
 /**
  * Summarize a podcast transcript using OpenAI GPT-4o.
- * @param transcript The full transcript or text of the podcast episode.
- * @param options Optional: { language, maxTokens, prompt }
+ * @param content The full transcript or text of the podcast episode.
+ * @param options Optional: { language, maxTokens, prompt, isFromTranscript }
  * @returns { summary: string, keyPoints: string[], sentiment: string }
  */
 export async function summarizePodcastOpenAI(
-  transcript: string,
+  content: string,
   options?: {
     language?: string;
     maxTokens?: number;
     prompt?: string;
+    isFromTranscript?: boolean;
   }
 ): Promise<{ summary: string; keyPoints: string[]; sentiment: string }> {
+  // Clean HTML tags and prepare content for AI processing
+  const cleanContent = cleanTextForAI(content);
+
   // Convert language code to full name for prompt
   const languageName =
     options?.language && LANGUAGE_MAP[options.language]
       ? LANGUAGE_MAP[options.language]
       : options?.language;
 
+  const isFromTranscript = options?.isFromTranscript ?? true;
+  const contentType = isFromTranscript ? "transcript" : "description";
+  const summaryInstruction = isFromTranscript
+    ? "in no more than 4 paragraphs"
+    : "in 2-3 paragraphs (noting this is based on episode description, not full transcript)";
+
   const systemPrompt =
     options?.prompt ||
     (languageName && languageName !== "English"
-      ? `You are a helpful assistant. Summarize the following podcast transcript in no more than 4 paragraphs in ${languageName}. Then, extract the key points as a bullet list in ${languageName}, and provide the overall sentiment (positive, negative, or neutral). Respond in JSON format: { "summary": string, "keyPoints": string[], "sentiment": string }. All text content must be written in ${languageName}.`
-      : `You are a helpful assistant. Summarize the following podcast transcript in no more than 4 paragraphs. Then, extract the key points as a bullet list, and provide the overall sentiment (positive, negative, or neutral). Respond in JSON format: { "summary": string, "keyPoints": string[], "sentiment": string }`);
+      ? `You are a helpful assistant. Summarize the following podcast ${contentType} ${summaryInstruction} in ${languageName}. Then, extract the key points as a bullet list in ${languageName}, and provide the overall sentiment (positive, negative, or neutral). Respond in JSON format: { "summary": string, "keyPoints": string[], "sentiment": string }. All text content must be written in ${languageName}.`
+      : `You are a helpful assistant. Summarize the following podcast ${contentType} ${summaryInstruction}. Then, extract the key points as a bullet list, and provide the overall sentiment (positive, negative, or neutral). Respond in JSON format: { "summary": string, "keyPoints": string[], "sentiment": string }`);
 
-  const userPrompt = `Podcast transcript:
-${transcript}`;
+  const userPrompt = `Podcast ${contentType}:
+${cleanContent}`;
 
   const completion = await client.chat.completions.create({
     model: process.env.OPENAI_API_MODEL || "gpt-4o",

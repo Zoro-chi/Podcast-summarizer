@@ -1,5 +1,6 @@
 import useSWR from "swr";
 import { Podcast } from "../types/podcast";
+import { deduplicatePodcasts } from "../utils/deduplication";
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -18,7 +19,7 @@ export default function useBestPodcasts(
     dedupingInterval: 60000, // 1 min cache
   });
   return {
-    podcasts: (data?.podcasts as Podcast[]) || [],
+    podcasts: deduplicatePodcasts((data?.podcasts as Podcast[]) || []),
     error,
     isLoading,
     mutate,

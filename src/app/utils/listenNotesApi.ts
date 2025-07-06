@@ -3,8 +3,13 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const LISTEN_NOTES_API_KEY = process.env.LISTEN_NOTES_API_KEY;
-const BASE_URL = "https://listen-api.listennotes.com/api/v2";
-// const MOCK_URL = "https://listen-api-test.listennotes.com/api/v2";
+
+// Toggle between LIVE and MOCK API
+// Set USE_MOCK_API=true in your .env.local file to use the Mock API for testing
+const USE_MOCK_API = process.env.USE_MOCK_API === "true";
+const BASE_URL = USE_MOCK_API
+  ? "https://listen-api-test.listennotes.com/api/v2"
+  : "https://listen-api.listennotes.com/api/v2";
 
 async function listenNotesFetch(
   endpoint: string,

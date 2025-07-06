@@ -5,6 +5,8 @@ import Image from "next/image";
 import Header from "../components/Header";
 import { tailwindColors } from "../constants/Color";
 import { Summary } from "../types/summary";
+import { useToast } from "../hooks/useToast";
+import ToastContainer from "../components/ToastContainer";
 
 // Utility to get or create a userId in localStorage
 function getOrCreateUserId() {
@@ -37,9 +39,11 @@ function cleanSummaryText(summary: string): string {
 
 function SummariesPageContent() {
   const searchParams = useSearchParams();
+  const { toasts, showToast, removeToast } = useToast();
 
   // Check if we're coming from summarize action
   const fromSummarize = searchParams.get("fromSummarize") === "true";
+  const isFromTranscript = searchParams.get("isFromTranscript") !== "false"; // Default to true for backward compatibility
 
   // Parse summary, keyPoints, sentiment from query params
   const summaryParam = cleanSummaryText(
@@ -78,8 +82,6 @@ function SummariesPageContent() {
   const [sentiment, setSentiment] = useState("neutral");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [deleteMessage, setDeleteMessage] = useState<string | null>(null);
   const [userSummaries, setUserSummaries] = useState<Summary[]>([]);
   const [formattedPubDate, setFormattedPubDate] = useState("");
   const [page, setPage] = useState(1);
@@ -172,7 +174,6 @@ function SummariesPageContent() {
   // Save summary to backend
   const handleSave = async () => {
     setSaving(true);
-    setError(null);
     try {
       const res = await fetch("/api/summaries", {
         method: "POST",
@@ -195,15 +196,19 @@ function SummariesPageContent() {
       const data = await res.json();
       // If the backend returns a flag or message indicating the summary already exists, do not reload
       if (data?.alreadyExists) {
-        setError("You have already summarized this episode.");
+        showToast("You have already summarized this episode.", "warning");
         setSaved(true);
       } else {
         setSaved(true);
+        showToast("Summary saved successfully!", "success");
         // Reload the page to fetch the latest saved summaries
         window.location.reload();
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save summary");
+      showToast(
+        e instanceof Error ? e.message : "Failed to save summary",
+        "error"
+      );
     } finally {
       setSaving(false);
     }
@@ -213,7 +218,6 @@ function SummariesPageContent() {
   const handleClearSummaries = async () => {
     if (!userId) return;
     setSaving(true);
-    setError(null);
     try {
       const res = await fetch(`/api/summaries?userId=${userId}`, {
         method: "DELETE",
@@ -221,8 +225,12 @@ function SummariesPageContent() {
       if (!res.ok) throw new Error("Failed to clear summaries");
       setUserSummaries([]);
       setSaved(false);
+      showToast("All summaries cleared successfully!", "success");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to clear summaries");
+      showToast(
+        e instanceof Error ? e.message : "Failed to clear summaries",
+        "error"
+      );
     } finally {
       setSaving(false);
     }
@@ -275,6 +283,12 @@ function SummariesPageContent() {
                   <div className="mt-2 text-gray-800 dark:text-gray-100">
                     {summary}
                   </div>
+                  {!isFromTranscript && (
+                    <div className="mt-2 text-sm text-amber-600 dark:text-amber-400 italic">
+                      ⚠️ Note: This summary is based on the episode description
+                      as the full transcript was not available.
+                    </div>
+                  )}
                 </div>
                 <div className="mt-2 text-gray-800 dark:text-gray-100">
                   <strong>Key Points:</strong>
@@ -294,7 +308,6 @@ function SummariesPageContent() {
                 >
                   {saving ? "Saving..." : saved ? "Saved!" : "Save Summary"}
                 </button>
-                {error && <div className="mt-2 text-red-500">{error}</div>}
               </>
             ) : null}
           </div>
@@ -369,12 +382,12 @@ function SummariesPageContent() {
                         setUserSummaries((prev) =>
                           prev.filter((sum) => sum._id !== s._id)
                         );
-                        setDeleteMessage("Summary deleted successfully.");
+                        showToast("Summary deleted successfully!", "success");
                       } else {
-                        setError("Failed to delete summary");
+                        showToast("Failed to delete summary", "error");
                       }
                     } catch {
-                      setError("Failed to delete summary");
+                      showToast("Failed to delete summary", "error");
                     }
                   }}
                 >
@@ -402,19 +415,10 @@ function SummariesPageContent() {
             Next
           </button>
         </div>
-        {deleteMessage && (
-          <div className="fixed top-4 left-1/2 transform -translate-x-1/2 bg-green-500 text-white px-4 py-2 rounded shadow z-50 flex items-center gap-2">
-            <span>{deleteMessage}</span>
-            <button
-              className="ml-2 text-white font-bold"
-              onClick={() => setDeleteMessage(null)}
-              aria-label="Dismiss notification"
-            >
-              ×
-            </button>
-          </div>
-        )}
       </main>
+      <ToastContainer
+        toasts={toasts.map((toast) => ({ ...toast, onClose: removeToast }))}
+      />
     </div>
   );
 }

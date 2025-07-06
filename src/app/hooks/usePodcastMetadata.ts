@@ -1,5 +1,6 @@
 import useSWR from "swr";
 import { Episode } from "../types/podcast";
+import { deduplicateEpisodes } from "../utils/deduplication";
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -19,7 +20,7 @@ export default function usePodcastMetadata(
     dedupingInterval: 60000, // 1 min cache
   });
   return {
-    episodes: (data?.episodes as Episode[]) || [],
+    episodes: deduplicateEpisodes((data?.episodes as Episode[]) || []),
     error,
     isLoading,
     mutate,
