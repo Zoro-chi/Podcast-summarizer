@@ -27,11 +27,12 @@ export default function Header({
     >
       <div className="flex items-center gap-3 mb-2 sm:mb-0">
         <Image
-          src="/images/podcast_summarizer_512.png"
+          src="/images/podcast_summarizer.png"
           alt="Podcast Summarizer Logo"
-          width={32}
-          height={32}
-          className="rounded"
+          width={100}
+          height={100}
+          className="rounded w-8 h-8 sm:w-[100px] sm:h-[100px]"
+          priority
         />
         <span className={`font-bold text-lg ${tailwindColors.text.primary}`}>
           Podcast Summarizer
@@ -103,7 +104,7 @@ export default function Header({
           Summaries
         </Link>
       </nav>
-      <div className="flex items-center gap-3 sm:gap-4">
+      <div className="flex items-center gap-8 m-4 sm:gap-4">
         {!hideSearchBar && (
           <SearchBar
             value={search}
