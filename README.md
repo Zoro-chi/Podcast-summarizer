@@ -2,15 +2,19 @@
 
 > An intelligent podcast episode summarizer that transforms lengthy episodes into digestible insights using AI.
 
+_______________________
+
 **Desktop View:**
 <img width="1470" alt="Desktop Screen" src="https://github.com/user-attachments/assets/01bc3843-2dba-4fc1-9a2c-ae1ed4a3d59e" />
+
+__________________________
 
 **Mobile View(In dark mode):**
 
 
 <img width="335" alt="Mobile Screen" src="https://github.com/user-attachments/assets/c517f442-0e13-43f6-a5e0-78bb5165e33d" />
 
----
+________________________
 
 [![Next.js](https://img.shields.io/badge/Next.js-15-black?style=flat-square&logo=next.js)](https://nextjs.org/)
 [![React](https://img.shields.io/badge/React-19-blue?style=flat-square&logo=react)](https://reactjs.org/)
