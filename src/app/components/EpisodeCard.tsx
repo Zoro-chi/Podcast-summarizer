@@ -8,6 +8,11 @@ interface EpisodeCardProps {
   onSummarize?: () => void;
   summarizing?: boolean;
   summary?: string;
+  transcript?: string;
+  onDelete?: () => void; // Add onDelete prop
+  onShowTranscript?: () => void;
+  showTranscriptButton?: boolean;
+  transcriptLoading?: boolean;
 }
 
 export default function EpisodeCard({
@@ -18,6 +23,8 @@ export default function EpisodeCard({
   onSummarize,
   summarizing = false,
   summary,
+  transcript,
+  onDelete, // Add onDelete prop
 }: EpisodeCardProps) {
   return (
     <div
@@ -40,7 +47,7 @@ export default function EpisodeCard({
               ? new Date(pubDate).toLocaleDateString()
               : pubDate}
           </span>
-          <div className="mt-2">
+          <div className="mt-2 flex flex-wrap gap-2">
             {onSummarize && (
               <button
                 onClick={onSummarize}
@@ -50,10 +57,24 @@ export default function EpisodeCard({
                 {summarizing ? "Summarizing..." : "Summarize"}
               </button>
             )}
+            {onDelete && (
+              <button
+                onClick={onDelete}
+                className="bg-red-500 text-white rounded px-4 py-1 font-medium hover:bg-red-700 transition ml-2"
+              >
+                Delete
+              </button>
+            )}
           </div>
           {summary && (
             <div className="mt-3 p-2 bg-gray-100 dark:bg-gray-800 rounded text-sm text-gray-800 dark:text-gray-200">
               <strong>Summary:</strong> {summary}
+            </div>
+          )}
+          {transcript && (
+            <div className="mt-3 p-2 bg-gray-50 dark:bg-gray-900 rounded text-xs text-gray-700 dark:text-gray-200 max-h-60 overflow-y-auto whitespace-pre-line">
+              <strong>Transcript:</strong>
+              <div className="mt-1">{transcript}</div>
             </div>
           )}
         </div>

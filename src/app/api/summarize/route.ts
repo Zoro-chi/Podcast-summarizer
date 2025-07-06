@@ -1,28 +1,37 @@
 // src/app/api/summarize/route.ts
 import { SummaryRepository } from "../../repositories/summaryRepository";
 import { NextRequest, NextResponse } from "next/server";
-// import { callGeminiLLM } from "@/utils/gemini"; // You implement this
+import { summarizePodcastGemini } from "../../utils/gemini";
+import { summarizePodcastOpenAI } from "../../utils/openai";
 
 export async function POST(req: NextRequest) {
-  const { episodeId } = await req.json();
+  const { episodeId, transcript, language } = await req.json();
 
   // 1. Check for existing summary
   const existing = await SummaryRepository.findByEpisodeId(episodeId);
   if (existing) {
-    return NextResponse.json({ summary: existing.content, cached: true });
+    return NextResponse.json({
+      summary: existing.content,
+      keyPoints: existing.keyPoints || [],
+      sentiment: existing.sentiment || "neutral",
+      cached: true,
+    });
   }
 
-  // 2. Generate summary with Gemini
-  // const { transcript } = await req.json(); // Use transcript when implementing summarization
-  // const summary = await callGeminiLLM(transcript);
+  // 2. Generate summary with Gemini (preferred) or OpenAI (fallback)
+  let aiResult;
+  try {
+    aiResult = await summarizePodcastGemini(transcript, { language });
+    if (!aiResult.summary) throw new Error("Gemini returned empty summary");
+  } catch {
+    aiResult = await summarizePodcastOpenAI(transcript, { language });
+  }
 
-  // 3. Save and return
-  // await SummaryRepository.createOrUpdate(episodeId, summary);
-  // return NextResponse.json({ summary, cached: false });
-
-  // Temporary response until summarization is implemented
-  return NextResponse.json(
-    { message: "Summarization not yet implemented" },
-    { status: 501 }
-  );
+  // 3. Return the AI result without saving (user must explicitly save)
+  return NextResponse.json({
+    summary: aiResult.summary,
+    keyPoints: aiResult.keyPoints,
+    sentiment: aiResult.sentiment,
+    cached: false,
+  });
 }

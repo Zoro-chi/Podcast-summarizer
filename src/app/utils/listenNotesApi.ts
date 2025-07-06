@@ -4,6 +4,7 @@ dotenv.config();
 
 const LISTEN_NOTES_API_KEY = process.env.LISTEN_NOTES_API_KEY;
 const BASE_URL = "https://listen-api.listennotes.com/api/v2";
+// const MOCK_URL = "https://listen-api-test.listennotes.com/api/v2";
 
 async function listenNotesFetch(
   endpoint: string,

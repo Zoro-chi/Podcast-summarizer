@@ -1,13 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { SummaryRepository } from "../../repositories/summaryRepository";
 import connectToDatabase from "../../utils/mongodb";
-import mongoose from "mongoose";
-
-// --- EXTEND SUMMARY MODEL TO SUPPORT USER ID ---
 import Summary from "../../models/Summary";
-
-// PATCH: Add userId to summary schema if not present (for migration)
-// (In production, update the schema and model properly)
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -22,7 +15,6 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  console.log("POST /api/summaries body:", body);
   const {
     userId,
     id,
@@ -37,21 +29,41 @@ export async function POST(req: NextRequest) {
     episodeImage,
   } = body;
   if (!userId || !id || !summary) {
-    console.error("Missing required fields", { userId, id, summary });
     return NextResponse.json(
       { error: "Missing required fields" },
       { status: 400 }
     );
   }
-  const db = await connectToDatabase();
-  console.log(
-    "Connected to DB:",
-    db?.connection?.name || db?.connections?.[0]?.name
-  );
+  await connectToDatabase();
   // Check if summary already exists for this user and episode
   const existing = await Summary.findOne({ userId, episodeId: id });
   if (existing) {
     return NextResponse.json({ alreadyExists: true });
+  }
+  // Map non-English sentiment to English enum
+  function normalizeSentiment(sent: string) {
+    if (!sent) return "neutral";
+    // Add more mappings as needed
+    const map: Record<string, string> = {
+      positive: "positive",
+      negative: "negative",
+      neutral: "neutral",
+      // Chinese
+      积极: "positive",
+      消极: "negative",
+      中性: "neutral",
+      // Spanish
+      positivo: "positive",
+      negativo: "negative",
+      // French
+      positif: "positive",
+      négatif: "negative",
+      neutre: "neutral",
+      // German
+      positiv: "positive",
+      negativ: "negative",
+    };
+    return map[sent.trim().toLowerCase()] || "neutral";
   }
   // Create new summary
   const saved = await Summary.create({
@@ -64,11 +76,10 @@ export async function POST(req: NextRequest) {
     content: summary,
     podcastTitle,
     keyPoints,
-    sentiment,
+    sentiment: normalizeSentiment(sentiment),
     episodeImage,
-    summaryType: "manual",
+    summaryType: "auto",
     status: "completed",
-    updatedAt: new Date(),
   });
   return NextResponse.json({ summary: saved });
 }
@@ -76,10 +87,23 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const userId = searchParams.get("userId");
+  const summaryId = searchParams.get("summaryId");
+  await connectToDatabase();
+  if (summaryId) {
+    // Delete a single summary by its _id
+    const deleted = await Summary.deleteOne({ _id: summaryId, userId });
+    if (deleted.deletedCount === 1) {
+      return NextResponse.json({ success: true });
+    } else {
+      return NextResponse.json(
+        { error: "Summary not found or not deleted" },
+        { status: 404 }
+      );
+    }
+  }
   if (!userId) {
     return NextResponse.json({ error: "Missing userId" }, { status: 400 });
   }
-  await connectToDatabase();
   await Summary.deleteMany({ userId });
   return NextResponse.json({ success: true });
 }

@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { getBestPodcasts } from "@/app/utils/listenNotesApi";
+import { Podcast } from "../../types/podcast";
 
 export async function GET() {
   try {
-    const data = (await getBestPodcasts()) as { podcasts: any[] };
+    const data = (await getBestPodcasts()) as { podcasts: Podcast[] };
     return NextResponse.json({ podcasts: data.podcasts || [] });
   } catch (err) {
     return NextResponse.json(

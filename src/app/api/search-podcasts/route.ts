@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { searchPodcasts } from "../../utils/listenNotesApi";
+import { Podcast } from "../../types/podcast";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -16,12 +17,12 @@ export async function GET(req: NextRequest) {
       q,
       type: "podcast",
       page_size: 8,
-    })) as { results?: any[] };
+    })) as { results?: Podcast[] };
 
     return NextResponse.json({ podcasts: data.results || [] });
-  } catch (error: any) {
+  } catch (error) {
     return NextResponse.json(
-      { error: error.message || "Search failed" },
+      { error: (error as Error).message || "Search failed" },
       { status: 500 }
     );
   }

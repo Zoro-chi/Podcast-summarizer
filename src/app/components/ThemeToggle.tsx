@@ -22,7 +22,7 @@ export default function ThemeToggle() {
   const handleToggle = () => {
     const newTheme = currentTheme === "dark" ? "light" : "dark";
     setTheme(newTheme);
-    console.log(`Switching from ${currentTheme} to ${newTheme}`);
+    localStorage.setItem("ps_theme", newTheme); // Save preference immediately
   };
 
   return (

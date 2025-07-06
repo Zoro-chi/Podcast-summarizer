@@ -1,11 +1,8 @@
 "use client";
-import { useState } from "react";
-import Image from "next/image";
-import ThemeToggle from "../components/ThemeToggle";
+import { useState, useEffect } from "react";
 import { tailwindColors } from "../constants/Color";
-import { useRouter } from "next/navigation";
-import Header from "../components/Header";
 import { useTheme } from "next-themes";
+import Header from "../components/Header";
 
 const LANGUAGES = [
   { code: "en", label: "English" },
@@ -30,24 +27,38 @@ const GENRES = [
 ];
 
 export default function SettingsPage() {
-  const router = useRouter();
   const { setTheme } = useTheme();
-  const [theme, setThemeState] = useState(
-    () => localStorage.getItem("ps_theme") || "system"
-  );
-  const [language, setLanguage] = useState(
-    () => localStorage.getItem("ps_language") || "en"
-  );
-  const [genre, setGenre] = useState(
-    () => localStorage.getItem("ps_genre") || ""
-  );
-  const [resultsPerPage, setResultsPerPage] = useState(
-    () => Number(localStorage.getItem("ps_resultsPerPage")) || 8
-  );
-  const [showExplicit, setShowExplicit] = useState(
-    () => localStorage.getItem("ps_showExplicit") === "true"
-  );
+  const [theme, setThemeState] = useState("system");
+  const [language, setLanguage] = useState("en");
+  const [genre, setGenre] = useState("");
+  const [resultsPerPage, setResultsPerPage] = useState(8);
+  const [showExplicit, setShowExplicit] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  // Load preferences from localStorage on mount (client-side only)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const storedTheme = localStorage.getItem("ps_theme") || "system";
+    setThemeState(storedTheme);
+    setLanguage(localStorage.getItem("ps_language") || "en");
+    setGenre(localStorage.getItem("ps_genre") || "");
+    setResultsPerPage(Number(localStorage.getItem("ps_resultsPerPage")) || 8);
+    setShowExplicit(localStorage.getItem("ps_showExplicit") === "true");
+    setTheme(storedTheme); // Apply theme immediately on mount
+  }, [setTheme]);
+
+  // Keep form controls in sync if localStorage changes in another tab
+  useEffect(() => {
+    function syncSettings() {
+      setThemeState(localStorage.getItem("ps_theme") || "system");
+      setLanguage(localStorage.getItem("ps_language") || "en");
+      setGenre(localStorage.getItem("ps_genre") || "");
+      setResultsPerPage(Number(localStorage.getItem("ps_resultsPerPage")) || 8);
+      setShowExplicit(localStorage.getItem("ps_showExplicit") === "true");
+    }
+    window.addEventListener("storage", syncSettings);
+    return () => window.removeEventListener("storage", syncSettings);
+  }, []);
 
   // Save to localStorage on change
   function persistSetting(key: string, value: string | number | boolean) {

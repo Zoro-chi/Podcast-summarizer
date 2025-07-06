@@ -1,30 +1,49 @@
 "use client";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import dynamic from "next/dynamic";
 import Header from "../components/Header";
-import EpisodeCard from "../components/EpisodeCard";
 import { tailwindColors } from "../constants/Color";
-import dummyEpisodes from "./dummyEpisodes.json";
+import usePodcastMetadata from "../hooks/usePodcastMetadata";
+import { Episode } from "../types/podcast";
+import { getResultsPerPage } from "../utils/userPreferences";
+
+const EpisodeCard = dynamic(() => import("../components/EpisodeCard"), {
+  loading: () => <div className="animate-pulse">Loading episode...</div>,
+});
+const SkeletonCard = dynamic(() => import("../components/SkeletonCard"), {
+  loading: () => <div className="animate-pulse">Loading...</div>,
+});
 
 function getUserSettings() {
   if (typeof window === "undefined" || typeof localStorage === "undefined") {
     return { resultsPerPage: 8 };
   }
   return {
-    resultsPerPage: Number(localStorage.getItem("ps_resultsPerPage")) || 8,
+    resultsPerPage: getResultsPerPage(8),
   };
 }
 
-export default function EpisodesPage() {
+function EpisodesPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const podcastId = searchParams.get("podcastId");
-  const [episodes, setEpisodes] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [settings, setSettings] = useState(getUserSettings());
-  const [summaries, setSummaries] = useState<{ [id: string]: string }>({});
   const [summarizing, setSummarizing] = useState<{ [id: string]: boolean }>({});
+  const [transcripts, setTranscripts] = useState<{ [id: string]: string }>({});
+  const [transcriptLoading, setTranscriptLoading] = useState<{
+    [id: string]: boolean;
+  }>({});
+  const [page, setPage] = useState(1);
+
+  // Get language preference from localStorage (client-side)
+  const [languagePref, setLanguagePref] = useState("en");
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const lang = localStorage.getItem("ps_language") || "en";
+      setLanguagePref(lang);
+    }
+  }, []);
 
   useEffect(() => {
     const onStorage = () => setSettings(getUserSettings());
@@ -32,43 +51,117 @@ export default function EpisodesPage() {
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
-  useEffect(() => {
-    // Use dummy data for now due to API rate limiting
-    setEpisodes(dummyEpisodes);
-    setLoading(false);
-    setError(null);
-    /*
-    if (!podcastId) return;
-    setLoading(true);
-    setError(null);
-    fetch(
-      `/api/episodes?podcastId=${podcastId}&page_size=${settings.resultsPerPage}`
-    )
-      .then((res) => res.json())
-      .then((data) => {
-        setEpisodes(data.episodes || []);
-        if (data.error) setError(data.error);
-      })
-      .catch(() => setError("Failed to fetch episodes"))
-      .finally(() => setLoading(false));
-    */
-  }, [podcastId, settings]);
+  const {
+    episodes: swrEpisodes,
+    error: swrError,
+    isLoading: swrLoading,
+  } = usePodcastMetadata(podcastId || undefined, page, settings.resultsPerPage);
 
-  // Dummy summarization handler
-  const handleSummarize = (ep: any) => {
-    // Always use ep.id for both dummy and live data
-    const episodeImage = ep.image || ep.thumbnail || "";
-    router.push(
-      `/summaries?id=${encodeURIComponent(ep.id)}&title=${encodeURIComponent(
-        ep.title
-      )}&description=${encodeURIComponent(
-        ep.description
-      )}&pubDate=${encodeURIComponent(
-        ep.pub_date_ms || ep.pub_date
-      )}&audio=${encodeURIComponent(
-        ep.audio
-      )}&episodeImage=${encodeURIComponent(episodeImage)}`
-    );
+  // Episode summarization handler
+  const handleSummarize = async (ep: Episode) => {
+    const epId = ep.id;
+    setSummarizing((prev) => ({ ...prev, [epId]: true }));
+    try {
+      // Fetch transcript
+      const transcriptRes = await fetch(
+        `/api/episodes/transcript?episodeId=${encodeURIComponent(epId)}`
+      );
+      const transcriptData = await transcriptRes.json();
+      if (!transcriptData.transcript)
+        throw new Error("No transcript available for this episode.");
+      // Call AI summarizer API
+      const res = await fetch("/api/summarize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          episodeId: epId,
+          transcript: transcriptData.transcript,
+          language: languagePref, // Pass language preference
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to summarize episode");
+      const data = await res.json();
+
+      // Clean up summary if it's in JSON format (including markdown-wrapped JSON)
+      let cleanSummary = data.summary || "";
+      let keyPoints = data.keyPoints || [];
+      let sentiment = data.sentiment || "neutral";
+
+      try {
+        // Check if summary is a JSON string (possibly wrapped in markdown)
+        let summaryText = cleanSummary.trim();
+
+        // Remove markdown code block if present
+        if (
+          summaryText.startsWith("```json") ||
+          summaryText.startsWith("```")
+        ) {
+          summaryText = summaryText
+            .replace(/^```(?:json)?\s*/, "")
+            .replace(/```\s*$/, "")
+            .trim();
+        }
+
+        // Try to parse as JSON
+        if (summaryText.startsWith("{")) {
+          const parsed = JSON.parse(summaryText);
+          if (parsed.summary) {
+            cleanSummary = parsed.summary;
+            keyPoints = parsed.keyPoints || keyPoints;
+            sentiment = parsed.sentiment || sentiment;
+          }
+        }
+      } catch {
+        // If parsing fails, use the original values
+      }
+
+      // Navigate to summaries page with AI-generated data (using URL params for reliability)
+      const episodeImage = ep.image || ep.thumbnail || "";
+      const podcastTitle =
+        searchParams.get("podcastTitle") || "Unknown Podcast";
+
+      const params = new URLSearchParams({
+        id: ep.id,
+        title: ep.title,
+        description: ep.description,
+        pubDate: String(ep.pub_date_ms ?? ep.pub_date ?? ""),
+        audio: ep.audio ?? "",
+        episodeImage: episodeImage ?? "",
+        podcastTitle: podcastTitle ?? "",
+        summary: String(cleanSummary ?? ""),
+        keyPoints: JSON.stringify(keyPoints ?? []),
+        sentiment: String(sentiment ?? ""),
+        fromSummarize: "true",
+      });
+
+      router.push(`/summaries?${params.toString()}`);
+    } catch {
+      // Handle error silently
+    } finally {
+      setSummarizing((prev) => ({ ...prev, [epId]: false }));
+    }
+  };
+
+  const handleShowTranscript = async (ep: Episode) => {
+    const epId = ep.id;
+    setTranscriptLoading((prev) => ({ ...prev, [epId]: true }));
+    try {
+      const res = await fetch(
+        `/api/episodes/transcript?episodeId=${encodeURIComponent(epId)}`
+      );
+      const data = await res.json();
+      setTranscripts((prev) => ({
+        ...prev,
+        [epId]: data.transcript || "No transcript available.",
+      }));
+    } catch {
+      setTranscripts((prev) => ({
+        ...prev,
+        [epId]: "Failed to fetch transcript.",
+      }));
+    } finally {
+      setTranscriptLoading((prev) => ({ ...prev, [epId]: false }));
+    }
   };
 
   return (
@@ -82,26 +175,63 @@ export default function EpisodesPage() {
         >
           Episodes
         </h1>
-        {loading && <div className="text-center text-lg">Loading...</div>}
-        {error && <div className="text-center text-red-500">{error}</div>}
-        {!loading && !error && episodes.length === 0 && (
+        {swrLoading && (
+          <div className="flex flex-col gap-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <SkeletonCard key={i} />
+            ))}
+          </div>
+        )}
+        {swrError && <div className="text-center text-red-500">{swrError}</div>}
+        {!swrLoading && !swrError && swrEpisodes.length === 0 && (
           <div className="text-center text-gray-500">No episodes found.</div>
         )}
         <div className="flex flex-col gap-4">
-          {episodes.map((ep) => (
-            <EpisodeCard
-              key={ep.id}
-              title={ep.title}
-              description={ep.description}
-              pubDate={ep.pub_date_ms || ep.pub_date}
-              audio={ep.audio}
-              onSummarize={() => handleSummarize(ep)}
-              summarizing={false}
-              summary={undefined}
-            />
-          ))}
+          {!swrLoading &&
+            swrEpisodes.map((ep: Episode) => (
+              <EpisodeCard
+                key={ep.id}
+                title={ep.title}
+                description={ep.description}
+                pubDate={ep.pub_date_ms ?? ep.pub_date ?? ""}
+                audio={ep.audio}
+                onSummarize={() => handleSummarize(ep)}
+                summarizing={!!summarizing[ep.id]}
+                summary={undefined}
+                transcript={transcripts[ep.id]}
+                onShowTranscript={() => handleShowTranscript(ep)}
+                showTranscriptButton={true}
+                transcriptLoading={!!transcriptLoading[ep.id]}
+              />
+            ))}
+        </div>
+        {/* Pagination Controls */}
+        <div className="flex justify-center mt-6 gap-4">
+          <button
+            className="px-3 py-1 rounded bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 disabled:opacity-50"
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page === 1}
+          >
+            Previous
+          </button>
+          <span className="px-2 py-1">Page {page}</span>
+          <button
+            className="px-3 py-1 rounded bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 disabled:opacity-50"
+            onClick={() => setPage((p) => p + 1)}
+            disabled={swrEpisodes.length < settings.resultsPerPage}
+          >
+            Next
+          </button>
         </div>
       </main>
     </div>
+  );
+}
+
+export default function EpisodesPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <EpisodesPageInner />
+    </Suspense>
   );
 }

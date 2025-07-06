@@ -32,12 +32,14 @@ export class SummaryRepository {
    */
   static async createOrUpdate(
     episodeId: string,
-    content: string
+    content: string,
+    keyPoints?: string[],
+    sentiment?: string
   ): Promise<ISummary> {
     await connectToDatabase();
     return Summary.findOneAndUpdate(
       { episodeId },
-      { content, updatedAt: new Date() },
+      { content, keyPoints, sentiment, updatedAt: new Date() },
       { upsert: true, new: true }
     );
   }

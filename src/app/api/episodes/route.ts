@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getEpisodesForPodcast } from "../../utils/listenNotesApi";
+import { Episode } from "../../types/podcast";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -10,12 +11,12 @@ export async function GET(req: NextRequest) {
   }
   try {
     const data = (await getEpisodesForPodcast(podcastId, { page_size })) as {
-      episodes?: any[];
+      episodes?: Episode[];
     };
     return NextResponse.json({ episodes: data.episodes || [] });
-  } catch (error: any) {
+  } catch (error) {
     return NextResponse.json(
-      { error: error.message || "Failed to fetch episodes" },
+      { error: (error as Error).message || "Failed to fetch episodes" },
       { status: 500 }
     );
   }
