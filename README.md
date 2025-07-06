@@ -6,6 +6,8 @@
 <img width="1470" alt="Desktop Screen" src="https://github.com/user-attachments/assets/01bc3843-2dba-4fc1-9a2c-ae1ed4a3d59e" />
 
 **Mobile View(In dark mode):**
+
+
 <img width="335" alt="Mobile Screen" src="https://github.com/user-attachments/assets/c517f442-0e13-43f6-a5e0-78bb5165e33d" />
 
 ---
