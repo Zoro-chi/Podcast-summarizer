@@ -1,6 +1,11 @@
 # 🎧 Podcast Summarizer
 
 > An intelligent podcast episode summarizer that transforms lengthy episodes into digestible insights using AI.
+<img width="1470" alt="Screenshot 2025-07-06 at 12 59 20" src="https://github.com/user-attachments/assets/01bc3843-2dba-4fc1-9a2c-ae1ed4a3d59e" />
+
+<img width="335" alt="Screenshot 2025-07-06 at 13 00 19" src="https://github.com/user-attachments/assets/c517f442-0e13-43f6-a5e0-78bb5165e33d" />
+
+_______________________________________________
 
 [![Next.js](https://img.shields.io/badge/Next.js-15-black?style=flat-square&logo=next.js)](https://nextjs.org/)
 [![React](https://img.shields.io/badge/React-19-blue?style=flat-square&logo=react)](https://reactjs.org/)
